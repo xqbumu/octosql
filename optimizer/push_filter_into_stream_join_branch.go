@@ -1,6 +1,8 @@
 package optimizer
 
 import (
+	"log"
+
 	"github.com/cube2222/octosql/octosql"
 	. "github.com/cube2222/octosql/physical"
 )
@@ -38,6 +40,14 @@ func PushDownFilterPredicatesIntoStreamJoinBranch(node Node) (Node, bool) {
 					stayedAbove = append(stayedAbove, filterPredicates[i])
 				}
 			}
+
+			// pass filter with relate join condition
+			leftSchemaJoinKeys := node.Filter.Source.StreamJoin.LeftKey
+			for i := 0; i < len(leftSchemaJoinKeys); i++ {
+				usesLeftKeys := leftSchemaJoinKeys[i].VariablesUsed()
+				log.Println(usesLeftKeys)
+			}
+			// rightSchemaJoinKeys := node.Filter.Source.StreamJoin.RightKey
 
 			if len(stayedAbove) == len(filterPredicates) {
 				return node

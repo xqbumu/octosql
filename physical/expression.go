@@ -278,6 +278,11 @@ func (expr Expression) variablesUsed(acc map[string]struct{}) {
 			arg.variablesUsed(acc)
 		}
 		return
+	case ExpressionTypeTuple:
+		for _, arg := range expr.Tuple.Arguments {
+			arg.variablesUsed(acc)
+		}
+		return
 	case ExpressionTypeTypeAssertion:
 		expr.TypeAssertion.Expression.variablesUsed(acc)
 		return

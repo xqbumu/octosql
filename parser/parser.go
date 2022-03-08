@@ -861,9 +861,11 @@ func ParseInfixComparison(left, right sqlparser.Expr, operator string) (logical.
 		), nil
 	}
 
-	switch rightParsed.(type) {
-	case *logical.Constant:
-		operator = sqlparser.EqualStr
+	if operator == sqlparser.InStr {
+		switch rightParsed.(type) {
+		case *logical.Constant:
+			operator = sqlparser.EqualStr
+		}
 	}
 
 	return logical.NewFunctionExpression(operator, []logical.Expression{leftParsed, rightParsed}), nil
