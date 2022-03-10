@@ -1,8 +1,6 @@
 package optimizer
 
 import (
-	"log"
-
 	"github.com/cube2222/octosql/octosql"
 	. "github.com/cube2222/octosql/physical"
 )
@@ -41,13 +39,44 @@ func PushDownFilterPredicatesIntoStreamJoinBranch(node Node) (Node, bool) {
 				}
 			}
 
-			// pass filter with relate join condition
-			leftSchemaJoinKeys := node.Filter.Source.StreamJoin.LeftKey
-			for i := 0; i < len(leftSchemaJoinKeys); i++ {
-				usesLeftKeys := leftSchemaJoinKeys[i].VariablesUsed()
-				log.Println(usesLeftKeys)
+			leftJoinKeys := node.Filter.Source.StreamJoin.LeftKey
+			rightJoinKeys := node.Filter.Source.StreamJoin.RightKey
+			genAppender := func(variable *Variable) (func(expr Expression), *Variable) {
+				for i := 0; i < len(leftJoinKeys); i++ {
+					if compareVariable(leftJoinKeys[i].Variable, variable) {
+						appender := func(expr Expression) {
+							pushedDownRight = append(pushedDownRight, expr)
+						}
+						return appender, rightJoinKeys[i].Variable
+					}
+					if compareVariable(rightJoinKeys[i].Variable, variable) {
+						appender := func(expr Expression) {
+							pushedDownLeft = append(pushedDownLeft, expr)
+						}
+						return appender, leftJoinKeys[i].Variable
+					}
+				}
+				return nil, nil
 			}
-			// rightSchemaJoinKeys := node.Filter.Source.StreamJoin.RightKey
+			for i := range filterPredicates {
+				expr := filterPredicates[i]
+				switch expr.ExpressionType {
+				case ExpressionTypeFunctionCall:
+					if appender, variable := genAppender(expr.FunctionCall.Arguments[0].Variable); variable != nil {
+						expr := Expression{
+							Type:           expr.Type,
+							ExpressionType: expr.ExpressionType,
+							FunctionCall: func() *FunctionCall {
+								fc := *expr.FunctionCall
+								fc.Arguments = append([]Expression{}, fc.Arguments...)
+								fc.Arguments[0].Variable = variable
+								return &fc
+							}(),
+						}
+						appender(expr)
+					}
+				}
+			}
 
 			if len(stayedAbove) == len(filterPredicates) {
 				return node
@@ -137,4 +166,8 @@ func usesVariablesFromSchema(schema Schema, variables []string) bool {
 		}
 	}
 	return false
+}
+
+func compareVariable(left, right *Variable) bool {
+	return left.Name == right.Name && left.IsLevel0 == right.IsLevel0
 }
