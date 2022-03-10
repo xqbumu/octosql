@@ -9,10 +9,10 @@ import (
 )
 
 type Environment struct {
-	CommonTableExpressions map[string]CommonTableExpression
-	TableValuedFunctions   map[string]TableValuedFunctionDescription
-	UniqueVariableNames    *VariableMapping
-	UniqueNameGenerator    map[string]int
+	CommonTableExprs     map[string]CommonTableExpr
+	TableValuedFunctions map[string]TableValuedFunctionDescription
+	UniqueVariableNames  *VariableMapping
+	UniqueNameGenerator  map[string]int
 }
 
 func (env *Environment) GetUnique(name string) string {
@@ -21,17 +21,17 @@ func (env *Environment) GetUnique(name string) string {
 	return fmt.Sprintf("%s_%d", name, index)
 }
 
-type CommonTableExpression struct {
+type CommonTableExpr struct {
 	Node                  physical.Node
 	UniqueVariableMapping map[string]string
 }
 
 func (env *Environment) WithRecordUniqueVariableNames(record map[string]string) Environment {
 	return Environment{
-		CommonTableExpressions: env.CommonTableExpressions,
-		TableValuedFunctions:   env.TableValuedFunctions,
-		UniqueVariableNames:    env.UniqueVariableNames.WithRecordMapping(record),
-		UniqueNameGenerator:    env.UniqueNameGenerator,
+		CommonTableExprs:     env.CommonTableExprs,
+		TableValuedFunctions: env.TableValuedFunctions,
+		UniqueVariableNames:  env.UniqueVariableNames.WithRecordMapping(record),
+		UniqueNameGenerator:  env.UniqueNameGenerator,
 	}
 }
 
@@ -90,7 +90,7 @@ func NewDataSource(name, alias string) *DataSource {
 }
 
 func (ds *DataSource) Typecheck(ctx context.Context, env physical.Environment, logicalEnv Environment) (physical.Node, map[string]string) {
-	if cte, ok := logicalEnv.CommonTableExpressions[ds.name]; ok {
+	if cte, ok := logicalEnv.CommonTableExprs[ds.name]; ok {
 		return cte.Node, cte.UniqueVariableMapping
 	}
 

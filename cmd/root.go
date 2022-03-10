@@ -30,7 +30,6 @@ import (
 	"github.com/cube2222/octosql/outputs/batch"
 	"github.com/cube2222/octosql/outputs/stream"
 	"github.com/cube2222/octosql/parser"
-	"github.com/cube2222/octosql/parser/sqlparser"
 	"github.com/cube2222/octosql/physical"
 	"github.com/cube2222/octosql/plugins/executor"
 	"github.com/cube2222/octosql/plugins/manager"
@@ -177,11 +176,11 @@ octosql "SELECT * FROM plugins.plugins"`,
 			PhysicalConfig:  nil,
 			VariableContext: nil,
 		}
-		statement, err := sqlparser.Parse(args[0])
+		statement, err := parser.Parse(args[0])
 		if err != nil {
 			return fmt.Errorf("couldn't parse query: %w", err)
 		}
-		logicalPlan, outputOptions, err := parser.ParseNode(statement.(sqlparser.SelectStatement), true)
+		logicalPlan, outputOptions, err := parser.LogicalPlan(statement, true)
 		if err != nil {
 			return fmt.Errorf("couldn't parse query: %w", err)
 		}
@@ -197,9 +196,9 @@ octosql "SELECT * FROM plugins.plugins"`,
 			logicalPlan,
 			env,
 			logical.Environment{
-				CommonTableExpressions: map[string]logical.CommonTableExpression{},
-				TableValuedFunctions:   tableValuedFunctions,
-				UniqueNameGenerator:    uniqueNameGenerator,
+				CommonTableExprs:     map[string]logical.CommonTableExpr{},
+				TableValuedFunctions: tableValuedFunctions,
+				UniqueNameGenerator:  uniqueNameGenerator,
 			},
 		)
 		if err != nil {
@@ -264,8 +263,8 @@ octosql "SELECT * FROM plugins.plugins"`,
 			orderByExpressions = make([]execution.Expression, len(outputOptions.OrderByExpressions))
 			for i := range outputOptions.OrderByExpressions {
 				physicalExpr, err := typecheckExpr(ctx, outputOptions.OrderByExpressions[i], env.WithRecordSchema(physicalPlan.Schema), logical.Environment{
-					CommonTableExpressions: map[string]logical.CommonTableExpression{},
-					TableValuedFunctions:   tableValuedFunctions,
+					CommonTableExprs:     map[string]logical.CommonTableExpr{},
+					TableValuedFunctions: tableValuedFunctions,
 					UniqueVariableNames: &logical.VariableMapping{
 						Mapping: mapping,
 					},
