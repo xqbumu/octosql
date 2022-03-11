@@ -173,11 +173,19 @@ func bindVariable(yylex yyLexer, bvar string) {
   partitionByType PartitionByType
   definer 	*Definer
   integer 	int
+
+  triggerExpr  TriggerExpr
+  triggerExprs TriggerExprs
+
+  tvfas TableValuedFunctionArguments
+  tvfa  *TableValuedFunctionArgument
+  tvfav TableValuedFunctionArgumentValue
 }
 
 %token LEX_ERROR
 %left <str> UNION
 %token <str> SELECT STREAM VSTREAM INSERT UPDATE DELETE FROM WHERE GROUP HAVING ORDER BY LIMIT OFFSET FOR
+%token <str> WATERMARK DELAY COUNTING
 %token <str> ALL DISTINCT AS EXISTS ASC DESC INTO DUPLICATE DEFAULT SET LOCK UNLOCK KEYS DO CALL
 %token <str> DISTINCTROW PARSER GENERATED ALWAYS
 %token <str> OUTFILE S3 DATA LOAD LINES TERMINATED ESCAPED ENCLOSED
@@ -213,7 +221,7 @@ func bindVariable(yylex yyLexer, bvar string) {
 %left <str> AND
 %right <str> NOT '!'
 %left <str> BETWEEN CASE WHEN THEN ELSE END
-%left <str> '=' '<' '>' LE GE NE NULL_SAFE_EQUAL IS LIKE REGEXP IN
+%left <str> '=' '<' '>' LE GE NE NULL_SAFE_EQUAL IS LIKE REGEXP IN RIGHTARROW
 %left <str> '&'
 %left <str> SHIFT_LEFT SHIFT_RIGHT
 %left <str> '+' '-'
@@ -238,7 +246,7 @@ func bindVariable(yylex yyLexer, bvar string) {
 // DDL Tokens
 %token <str> CREATE ALTER DROP RENAME ANALYZE ADD FLUSH CHANGE MODIFY DEALLOCATE
 %token <str> REVERT
-%token <str> SCHEMA TABLE INDEX VIEW TO IGNORE IF PRIMARY COLUMN SPATIAL FULLTEXT KEY_BLOCK_SIZE CHECK INDEXES
+%token <str> SCHEMA TABLE DESCRIPTOR INDEX VIEW TO IGNORE IF PRIMARY COLUMN SPATIAL FULLTEXT KEY_BLOCK_SIZE CHECK INDEXES
 %token <str> ACTION CASCADE CONSTRAINT FOREIGN NO REFERENCES RESTRICT
 %token <str> SHOW DESCRIBE EXPLAIN DATE ESCAPE REPAIR OPTIMIZE TRUNCATE COALESCE EXCHANGE REBUILD PARTITIONING REMOVE PREPARE EXECUTE
 %token <str> MAXVALUE PARTITION REORGANIZE LESS THAN PROCEDURE TRIGGER
@@ -360,6 +368,9 @@ func bindVariable(yylex yyLexer, bvar string) {
 %type <expr> expression signed_literal signed_literal_or_null null_as_literal now_or_signed_literal signed_literal bit_expr simple_expr literal NUM_literal text_literal bool_pri literal_or_null now predicate tuple_expression
 %type <tableExprs> from_opt table_references from_clause
 %type <tableExpr> table_reference table_factor join_table
+%type <tvfas> table_valued_function_arguments table_valued_function_arguments_opt
+%type <tvfa> table_valued_function_argument
+%type <tvfav> table_valued_function_argument_value
 %type <joinCondition> join_condition join_condition_opt on_expression_opt
 %type <tableNames> table_name_list delete_table_list view_name_list
 %type <joinType> inner_join outer_join straight_join natural_join
@@ -396,6 +407,8 @@ func bindVariable(yylex yyLexer, bvar string) {
 %type <str> header_opt export_options manifest_opt overwrite_opt format_opt optionally_opt
 %type <str> fields_opts fields_opt_list fields_opt lines_opts lines_opt lines_opt_list
 %type <lock> locking_clause
+%type <triggerExprs> trigger_expression_list_opt trigger_expression_list
+%type <triggerExpr> trigger_expression
 %type <columns> ins_column_list column_list at_id_list column_list_opt index_list execute_statement_list_opt
 %type <partitions> opt_partition_clause partition_list
 %type <updateExprs> on_dup_opt
@@ -667,7 +680,7 @@ query_expression:
   }
 | SELECT comment_opt cache_opt NEXT num_val for_from table_name
   {
-	$$ = NewSelect(Comments($2), SelectExprs{&Nextval{Expr: $5}}, []string{$3}/*options*/, nil, TableExprs{&AliasedTableExpr{Expr: $7}}, nil/*where*/, nil/*groupBy*/, nil/*having*/)
+	$$ = NewSelect(Comments($2), SelectExprs{&Nextval{Expr: $5}}, []string{$3}/*options*/, nil, TableExprs{&AliasedTableExpr{Expr: $7}}, nil/*where*/, nil/*groupBy*/, nil/*having*/, nil/*triggers*/)
   }
 
 query_expression_body:
@@ -756,11 +769,11 @@ query_primary:
 //  1         2            3              4                    5             6                7           8
   SELECT comment_opt select_options select_expression_list into_clause from_opt where_expression_opt group_by_opt having_opt
   {
-    $$ = NewSelect(Comments($2), $4/*SelectExprs*/, $3/*options*/, $5/*into*/, $6/*from*/, NewWhere(WhereClause, $7), GroupBy($8), NewWhere(HavingClause, $9))
+    $$ = NewSelect(Comments($2), $4/*SelectExprs*/, $3/*options*/, $5/*into*/, $6/*from*/, NewWhere(WhereClause, $7), GroupBy($8), NewWhere(HavingClause, $9), nil/*triggers*/)
   }
-| SELECT comment_opt select_options select_expression_list from_opt where_expression_opt group_by_opt having_opt
+| SELECT comment_opt select_options select_expression_list from_opt where_expression_opt group_by_opt having_opt trigger_expression_list_opt
   {
-    $$ = NewSelect(Comments($2), $4/*SelectExprs*/, $3/*options*/, nil, $5/*from*/, NewWhere(WhereClause, $6), GroupBy($7), NewWhere(HavingClause, $8))
+    $$ = NewSelect(Comments($2), $4/*SelectExprs*/, $3/*options*/, nil, $5/*from*/, NewWhere(WhereClause, $6), GroupBy($7), NewWhere(HavingClause, $8), $9/*triggers*/)
   }
 
 
@@ -1363,7 +1376,7 @@ NULL
     $$ = &NullVal{}
  }
 
- signed_literal:
+signed_literal:
  literal
 | '+' NUM_literal
    {
@@ -3977,6 +3990,10 @@ table_factor:
   {
     $$ = &ParenTableExpr{Exprs: $2}
   }
+| ID openb table_valued_function_arguments_opt closeb as_opt table_id
+  {
+    $$ = &TableValuedFunction{Name: NewColIdent(string($1)), Args: $3, As: $6}
+  }
 
 derived_table:
   openb query_expression closeb
@@ -3992,6 +4009,45 @@ table_name as_opt_id index_hint_list_opt
 | table_name PARTITION openb partition_list closeb as_opt_id index_hint_list_opt
   {
     $$ = &AliasedTableExpr{Expr:$1, Partitions: $4, As: $6, Hints: $7}
+  }
+
+table_valued_function_arguments_opt:
+  {
+    $$ = nil
+  }
+| table_valued_function_arguments
+  {
+    $$ = $1
+  }
+
+table_valued_function_arguments:
+  table_valued_function_argument
+  {
+    $$ = TableValuedFunctionArguments{$1}
+  }
+| table_valued_function_arguments ',' table_valued_function_argument
+  {
+    $$ = append($$, $3)
+  }
+
+table_valued_function_argument:
+  sql_id RIGHTARROW table_valued_function_argument_value
+  {
+    $$ = &TableValuedFunctionArgument{Name: $1, Value: $3}
+  }
+
+table_valued_function_argument_value:
+  expression
+  {
+    $$ = &ExprTableValuedFunctionArgumentValue{Expr: $1}
+  }
+| TABLE openb table_reference closeb
+  {
+    $$ = &TableDescriptorTableValuedFunctionArgumentValue{Table: $3}
+  }
+| DESCRIPTOR openb column_name closeb
+  {
+    $$ = &FieldDescriptorTableValuedFunctionArgumentValue{Field: $3}
   }
 
 column_list_opt:
@@ -5441,6 +5497,43 @@ optionally_opt:
     $$ = " optionally"
   }
 
+trigger_expression_list_opt:
+  {
+    $$ = nil
+  }
+| TRIGGER trigger_expression_list
+  {
+    $$ = $2
+  }
+
+trigger_expression_list:
+  trigger_expression
+  {
+    $$ = TriggerExprs{$1}
+  }
+| trigger_expression_list ',' trigger_expression
+  {
+    $$ = append($1, $3)
+  }
+
+trigger_expression:
+  ON WATERMARK
+  {
+    $$ = &WatermarkTriggerExpr{}
+  }
+| ON END OF STREAM
+  {
+    $$ = &EndOfStreamTriggerExpr{}
+  }
+| AFTER DELAY expression
+  {
+    $$ = &DelayTriggerExpr{Delay: $3}
+  }
+| COUNTING expression
+  {
+    $$ = &CountingTriggerExpr{Count: $2}
+  }
+
 // insert_data expands all combinations into a single rule.
 // This avoids a shift/reduce conflict while encountering the
 // following two possible constructs:
@@ -5913,6 +6006,7 @@ non_reserved_keyword:
 | DEALLOCATE
 | DECIMAL_TYPE
 | DELAY_KEY_WRITE
+| DELAY
 | DEFINER
 | DEFINITION
 | DESCRIPTION
@@ -6149,6 +6243,7 @@ non_reserved_keyword:
 | VITESS_TABLETS
 | VSCHEMA
 | WARNINGS
+| WATERMARK
 | WITHOUT
 | WORK
 | YEAR

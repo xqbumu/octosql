@@ -189,7 +189,13 @@ func (tkn *Tokenizer) Scan() (int, string) {
 
 		tkn.skip(1)
 		switch ch {
-		case '=', ',', '(', ')', '+', '*', '%', '^', '~':
+		case '=':
+			if tkn.cur() == '>' {
+				tkn.skip(1)
+				return RIGHTARROW, ""
+			}
+			return int(ch), ""
+		case ',', '(', ')', '+', '*', '%', '^', '~':
 			return int(ch), ""
 		case '&':
 			if tkn.cur() == '&' {

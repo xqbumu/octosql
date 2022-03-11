@@ -618,7 +618,7 @@ func NewColNameWithQualifier(identifier string, table TableName) *ColName {
 }
 
 //NewSelect is used to create a select statement
-func NewSelect(comments Comments, exprs SelectExprs, selectOptions []string, into *SelectInto, from TableExprs, where *Where, groupBy GroupBy, having *Where) *Select {
+func NewSelect(comments Comments, exprs SelectExprs, selectOptions []string, into *SelectInto, from TableExprs, where *Where, groupBy GroupBy, having *Where, triggers TriggerExprs) *Select {
 	var cache *bool
 	var distinct, straightJoinHint, sqlFoundRows bool
 
@@ -650,6 +650,7 @@ func NewSelect(comments Comments, exprs SelectExprs, selectOptions []string, int
 		Where:            where,
 		GroupBy:          groupBy,
 		Having:           having,
+		TriggerExprs:     triggers,
 	}
 }
 
@@ -907,6 +908,17 @@ func (node *Select) AddGroupBy(expr Expr) {
 		}
 	}
 	node.GroupBy = append(node.GroupBy, expr)
+}
+
+// AddTriggerExpr adds a trigger expression, unless it's already present
+func (node *Select) AddTriggerExpr(expr TriggerExpr) {
+	for _, te := range node.TriggerExprs {
+		if EqualsTriggerExpr(te, expr) {
+			// triggers are sets - duplicates don't add anything, so we can just skip these
+			return
+		}
+	}
+	node.TriggerExprs = append(node.TriggerExprs, expr)
 }
 
 // AddWhere adds the boolean expression to the

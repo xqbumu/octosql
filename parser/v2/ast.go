@@ -239,6 +239,8 @@ type (
 		Limit       *Limit
 		Lock        Lock
 		Into        *SelectInto
+
+		TriggerExprs TriggerExprs
 	}
 
 	// SelectInto is a struct that represent the INTO part of a select query
