@@ -1913,6 +1913,7 @@ type (
 )
 
 func (TableName) iSimpleTableExpr()     {}
+func (Subquery) iSimpleTableExpr()      {}
 func (*DerivedTable) iSimpleTableExpr() {}
 
 // TableNames is a list of TableName.

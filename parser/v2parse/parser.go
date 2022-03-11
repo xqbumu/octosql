@@ -260,25 +260,25 @@ func ParseSelect(statement *sqlparser.Select, topmost bool) (logical.Node, *Outp
 	return root, outputOptions, nil
 }
 
-func ParseWith(statement *sqlparser.With, topmost bool) (logical.Node, *OutputOptions, error) {
-	source, outputOptions, err := ParseNode(statement.Select, topmost)
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "couldn't parse underlying select in WITH statement")
-	}
+// func ParseWith(statement *sqlparser.With, topmost bool) (logical.Node, *OutputOptions, error) {
+// 	source, outputOptions, err := ParseNode(statement.Select, topmost)
+// 	if err != nil {
+// 		return nil, nil, errors.Wrap(err, "couldn't parse underlying select in WITH statement")
+// 	}
 
-	nodes := make([]logical.Node, len(statement.CommonTableExprs))
-	names := make([]string, len(statement.CommonTableExprs))
-	for i, cte := range statement.CommonTableExprs {
-		node, _, err := ParseNode(cte.Select, false)
-		if err != nil {
-			return nil, nil, errors.Wrapf(err, "couldn't parse common table expression %s with index %d", cte.Name, i)
-		}
-		nodes[i] = node
-		names[i] = cte.Name.String()
-	}
+// 	nodes := make([]logical.Node, len(statement.CommonTableExprs))
+// 	names := make([]string, len(statement.CommonTableExprs))
+// 	for i, cte := range statement.CommonTableExprs {
+// 		node, _, err := ParseNode(cte.Select, false)
+// 		if err != nil {
+// 			return nil, nil, errors.Wrapf(err, "couldn't parse common table expression %s with index %d", cte.Name, i)
+// 		}
+// 		nodes[i] = node
+// 		names[i] = cte.Name.String()
+// 	}
 
-	return logical.NewWith(names, nodes, source), outputOptions, nil
-}
+// 	return logical.NewWith(names, nodes, source), outputOptions, nil
+// }
 
 func ParseNode(statement sqlparser.SelectStatement, topmost bool) (logical.Node, *OutputOptions, error) {
 	switch statement := statement.(type) {
@@ -289,11 +289,11 @@ func ParseNode(statement sqlparser.SelectStatement, topmost bool) (logical.Node,
 	// 	plan, err := ParseUnion(statement)
 	// 	return plan, &logical.OutputOptions{}, err
 
-	case *sqlparser.ParenSelect:
-		return ParseNode(statement.Select, topmost)
+	// case *sqlparser.ParenSelect:
+	// 	return ParseNode(statement.Select, topmost)
 
-	case *sqlparser.With:
-		return ParseWith(statement, topmost)
+	// case *sqlparser.With:
+	// 	return ParseWith(statement, topmost)
 
 	default:
 		return nil, nil, errors.Errorf("unsupported select %+v of type %v", statement, reflect.TypeOf(statement))
@@ -362,7 +362,7 @@ func ParseJoinTableExpression(expr *sqlparser.JoinTableExpr) (logical.Node, erro
 
 	var source, joined logical.Node
 	switch expr.Join {
-	case sqlparser.LeftJoinType, sqlparser.JoinType:
+	case sqlparser.LeftJoinType, sqlparser.NormalJoinType:
 		source = leftTable
 		joined = rightTable
 	case sqlparser.RightJoinType:
@@ -373,11 +373,11 @@ func ParseJoinTableExpression(expr *sqlparser.JoinTableExpr) (logical.Node, erro
 	}
 
 	var node logical.Node
-	if expr.Strategy == sqlparser.LookupJoinStrategy {
+	if expr.Join == sqlparser.LookupJoinStrategy {
 		switch expr.Join {
 		case sqlparser.LeftJoinType, sqlparser.RightJoinType:
 			panic("implement me")
-		case sqlparser.JoinStr:
+		case sqlparser.NormalJoinType:
 			node = logical.NewLateralJoin(source, joined)
 		default:
 			return nil, errors.Errorf("invalid join expression: %v", expr.Join)
@@ -386,7 +386,7 @@ func ParseJoinTableExpression(expr *sqlparser.JoinTableExpr) (logical.Node, erro
 		switch expr.Join {
 		case sqlparser.LeftJoinType, sqlparser.RightJoinType:
 			panic("implement me")
-		case sqlparser.JoinStr:
+		case sqlparser.NormalJoinType:
 			node = logical.NewJoin(source, joined)
 		default:
 			return nil, errors.Errorf("invalid join expression: %v", expr.Join)
@@ -821,13 +821,13 @@ func ParseInfixOperator(left, right sqlparser.Expr, operator string) (logical.Ex
 	}
 }
 
-func ParsePrefixOperator(child sqlparser.Expr, operator string) (logical.Expression, error) {
-	childParsed, err := ParseExpression(child)
-	if err != nil {
-		return nil, errors.Wrapf(err, "couldn't parse child of %s operator %+v", operator, child)
-	}
-	return logical.NewFunctionExpression(operator, []logical.Expression{childParsed}), nil
-}
+// func ParsePrefixOperator(child sqlparser.Expr, operator string) (logical.Expression, error) {
+// 	childParsed, err := ParseExpression(child)
+// 	if err != nil {
+// 		return nil, errors.Wrapf(err, "couldn't parse child of %s operator %+v", operator, child)
+// 	}
+// 	return logical.NewFunctionExpression(operator, []logical.Expression{childParsed}), nil
+// }
 
 func ParseInfixComparison(left, right sqlparser.Expr, operator string) (logical.Expression, error) {
 	leftParsed, err := ParseExpression(left)
