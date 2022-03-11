@@ -131,9 +131,9 @@ func ParseSelect(statement *sqlparser.Select, topmost bool) (logical.Node, *Outp
 			return nil, nil, errors.Errorf("couldn't parse expression as aggregate nor expression: %s %s", err, exprErr)
 		}
 
-		triggers := make([]logical.Trigger, len(statement.Trigger))
-		for i := range statement.Trigger {
-			triggers[i], err = ParseTrigger(statement.Trigger[i])
+		triggers := make([]logical.Trigger, len(statement.TriggerExprs))
+		for i := range statement.TriggerExprs {
+			triggers[i], err = ParseTrigger(statement.TriggerExprs[i])
 			if err != nil {
 				return nil, nil, errors.Wrapf(err, "couldn't parse trigger with index %d", i)
 			}
@@ -233,7 +233,7 @@ func ParseSelect(statement *sqlparser.Select, topmost bool) (logical.Node, *Outp
 		}
 	}
 
-	if len(statement.Distinct) > 0 {
+	if statement.Distinct {
 		root = logical.NewDistinct(root)
 	}
 
@@ -242,7 +242,7 @@ func ParseSelect(statement *sqlparser.Select, topmost bool) (logical.Node, *Outp
 			return nil, nil, errors.Errorf("LIMIT in non-topmost expression not currently supported.")
 		}
 
-		l, ok := statement.Limit.Rowcount.(*sqlparser.SQLVal)
+		l, ok := statement.Limit.Rowcount.(*sqlparser.Literal)
 		if !ok {
 			return nil, nil, errors.Errorf("LIMIT parameter must be constant, is: %+v", statement.Limit.Rowcount)
 		}
@@ -362,10 +362,10 @@ func ParseJoinTableExpression(expr *sqlparser.JoinTableExpr) (logical.Node, erro
 
 	var source, joined logical.Node
 	switch expr.Join {
-	case sqlparser.LeftJoinStr, sqlparser.JoinStr:
+	case sqlparser.LeftJoinType, sqlparser.JoinType:
 		source = leftTable
 		joined = rightTable
-	case sqlparser.RightJoinStr:
+	case sqlparser.RightJoinType:
 		source = rightTable
 		joined = leftTable
 	default:
@@ -375,7 +375,7 @@ func ParseJoinTableExpression(expr *sqlparser.JoinTableExpr) (logical.Node, erro
 	var node logical.Node
 	if expr.Strategy == sqlparser.LookupJoinStrategy {
 		switch expr.Join {
-		case sqlparser.LeftJoinStr, sqlparser.RightJoinStr:
+		case sqlparser.LeftJoinType, sqlparser.RightJoinType:
 			panic("implement me")
 		case sqlparser.JoinStr:
 			node = logical.NewLateralJoin(source, joined)
@@ -384,7 +384,7 @@ func ParseJoinTableExpression(expr *sqlparser.JoinTableExpr) (logical.Node, erro
 		}
 	} else {
 		switch expr.Join {
-		case sqlparser.LeftJoinStr, sqlparser.RightJoinStr:
+		case sqlparser.LeftJoinType, sqlparser.RightJoinType:
 			panic("implement me")
 		case sqlparser.JoinStr:
 			node = logical.NewJoin(source, joined)
@@ -488,9 +488,9 @@ func ParseAggregate(expr sqlparser.Expr) (string, logical.Expression, error) {
 	return "", nil, errors.Wrapf(ErrNotAggregate, "invalid group by select expression type")
 }
 
-func ParseTrigger(trigger sqlparser.Trigger) (logical.Trigger, error) {
+func ParseTrigger(trigger sqlparser.TriggerExpr) (logical.Trigger, error) {
 	switch trigger := trigger.(type) {
-	case *sqlparser.CountingTrigger:
+	case *sqlparser.CountingTriggerExpr:
 		c, ok := trigger.Count.(*sqlparser.SQLVal)
 		if !ok {
 			return nil, errors.Errorf("counting trigger parameter must be constant, is: %+v", trigger.Count)
@@ -504,17 +504,17 @@ func ParseTrigger(trigger sqlparser.Trigger) (logical.Trigger, error) {
 		}
 		return logical.NewCountingTrigger(uint(i)), nil
 
-	case *sqlparser.DelayTrigger:
+	case *sqlparser.DelayTriggerExpr:
 		delayExpr, err := ParseExpression(trigger.Delay)
 		if err != nil {
 			return nil, errors.Wrap(err, "couldn't parse delay expression")
 		}
 		return logical.NewDelayTrigger(delayExpr), nil
 
-	case *sqlparser.WatermarkTrigger:
+	case *sqlparser.WatermarkTriggerExpr:
 		return logical.NewWatermarkTrigger(), nil
 
-	case *sqlparser.EndOfStreamTrigger:
+	case *sqlparser.EndOfStreamTriggerExpr:
 		return logical.NewEndOfStreamTrigger(), nil
 	}
 
