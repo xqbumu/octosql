@@ -1868,12 +1868,16 @@ type (
 	JoinTableExpr struct {
 		LeftExpr  TableExpr
 		Join      JoinType
+		Strategy  JoinStrategy
 		RightExpr TableExpr
 		Condition *JoinCondition
 	}
 
 	// JoinType represents the type of Join for JoinTableExpr
 	JoinType int8
+
+	// JoinStrategy represents the strategy of Join for JoinTableExpr
+	JoinStrategy int8
 
 	// ParenTableExpr represents a parenthesized list of TableExpr.
 	ParenTableExpr struct {

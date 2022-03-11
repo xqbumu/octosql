@@ -396,6 +396,13 @@ const (
 	NaturalRightJoinType
 )
 
+// Constants for Enum Type - JoinStrategy
+const (
+	UndefinedJoinStrategy JoinStrategy = iota
+	LookupJoinStrategy
+	StreamJoinStrategy
+)
+
 // Constants for Enum Type - ComparisonExprOperator
 const (
 	EqualOp ComparisonExprOperator = iota
