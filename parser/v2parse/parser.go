@@ -373,7 +373,7 @@ func ParseJoinTableExpression(expr *sqlparser.JoinTableExpr) (logical.Node, erro
 	}
 
 	var node logical.Node
-	if expr.Join == sqlparser.LookupJoinStrategy {
+	if expr.Strategy == sqlparser.LookupJoinStrategy {
 		switch expr.Join {
 		case sqlparser.LeftJoinType, sqlparser.RightJoinType:
 			panic("implement me")
