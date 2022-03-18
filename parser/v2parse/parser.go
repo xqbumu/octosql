@@ -13,6 +13,7 @@ import (
 	"github.com/cube2222/octosql/logical"
 	"github.com/cube2222/octosql/octosql"
 	sqlparser "github.com/cube2222/octosql/parser/v2"
+	v2 "github.com/cube2222/octosql/parser/v2"
 )
 
 // func ParseUnion(statement *sqlparser.Union) (logical.Node, error) {
@@ -260,40 +261,60 @@ func ParseSelect(statement *sqlparser.Select, topmost bool) (logical.Node, *Outp
 	return root, outputOptions, nil
 }
 
-// func ParseWith(statement *sqlparser.With, topmost bool) (logical.Node, *OutputOptions, error) {
-// 	source, outputOptions, err := ParseNode(statement.Select, topmost)
-// 	if err != nil {
-// 		return nil, nil, errors.Wrap(err, "couldn't parse underlying select in WITH statement")
-// 	}
+func parseWith(statement *sqlparser.With, topmost bool) ([]string, []logical.Node, error) {
+	i := 0
+	v2.Walk(func(node v2.SQLNode) (kontinue bool, err error) {
+		if _, ok := node.(*v2.CommonTableExpr); ok {
+			i++
+		}
+		return true, nil
+	}, statement)
 
-// 	nodes := make([]logical.Node, len(statement.CommonTableExprs))
-// 	names := make([]string, len(statement.CommonTableExprs))
-// 	for i, cte := range statement.CommonTableExprs {
-// 		node, _, err := ParseNode(cte.Select, false)
-// 		if err != nil {
-// 			return nil, nil, errors.Wrapf(err, "couldn't parse common table expression %s with index %d", cte.Name, i)
-// 		}
-// 		nodes[i] = node
-// 		names[i] = cte.Name.String()
-// 	}
+	nodes := make([]logical.Node, i)
+	names := make([]string, i)
+	i = 0
+	v2.Walk(func(node v2.SQLNode) (kontinue bool, err error) {
+		switch cte := node.(type) {
+		case *v2.CommonTableExpr:
+			node, _, err := ParseNode(cte.Subquery.Select, false)
+			if err != nil {
+				return false, errors.Wrapf(err, "couldn't parse common table expression %s with index %d", cte.TableID.String(), i)
+			}
+			nodes[i] = node
+			names[i] = cte.TableID.CompliantName()
+			i++
+		}
 
-// 	return logical.NewWith(names, nodes, source), outputOptions, nil
-// }
+		return true, nil
+	}, statement)
+
+	return names, nodes, nil
+}
 
 func ParseNode(statement sqlparser.SelectStatement, topmost bool) (logical.Node, *OutputOptions, error) {
 	switch statement := statement.(type) {
 	case *sqlparser.Select:
-		return ParseSelect(statement, topmost)
+		source, outputOptions, err := ParseSelect(statement, topmost)
+		if statement.With != nil {
+			names, nodes, err := parseWith(statement.With, topmost)
+			if err != nil {
+				return nil, nil, err
+			}
+			return logical.NewWith(names, nodes, source), outputOptions, err
+		}
+		return source, outputOptions, err
 
 	// case *sqlparser.Union:
 	// 	plan, err := ParseUnion(statement)
 	// 	return plan, &logical.OutputOptions{}, err
 
+	// // [TODO]
 	// case *sqlparser.ParenSelect:
 	// 	return ParseNode(statement.Select, topmost)
 
+	// // [TODO]
 	// case *sqlparser.With:
-	// 	return ParseWith(statement, topmost)
+	// 	return parseWith(statement, topmost)
 
 	default:
 		return nil, nil, errors.Errorf("unsupported select %+v of type %v", statement, reflect.TypeOf(statement))
@@ -345,6 +366,13 @@ func ParseAliasedTableExpression(expr *sqlparser.AliasedTableExpr) (logical.Node
 		}
 		return logical.NewRequalifier(expr.As.String(), subQuery), nil
 
+	case *sqlparser.DerivedTable:
+		subQuery, _, err := ParseNode(subExpr.Select, false)
+		if err != nil {
+			return nil, errors.Wrap(err, "couldn't parse derived table")
+		}
+		return logical.NewRequalifier(expr.As.String(), subQuery), nil
+
 	default:
 		return nil, errors.Errorf("invalid aliased table expression %+v of type %v", expr.Expr, reflect.TypeOf(expr.Expr))
 	}
@@ -369,7 +397,7 @@ func ParseJoinTableExpression(expr *sqlparser.JoinTableExpr) (logical.Node, erro
 		source = rightTable
 		joined = leftTable
 	default:
-		return nil, errors.Errorf("invalid join expression: %v", expr.Join)
+		return nil, errors.Errorf("invalid join expression: %v", expr.Join.ToString())
 	}
 
 	var node logical.Node
@@ -491,7 +519,7 @@ func ParseAggregate(expr sqlparser.Expr) (string, logical.Expression, error) {
 func ParseTrigger(trigger sqlparser.TriggerExpr) (logical.Trigger, error) {
 	switch trigger := trigger.(type) {
 	case *sqlparser.CountingTriggerExpr:
-		c, ok := trigger.Count.(*sqlparser.SQLVal)
+		c, ok := trigger.Count.(*sqlparser.Literal)
 		if !ok {
 			return nil, errors.Errorf("counting trigger parameter must be constant, is: %+v", trigger.Count)
 		}
@@ -547,7 +575,7 @@ func ParseExpression(expr sqlparser.Expr) (logical.Expression, error) {
 			return nil, errors.Wrap(err, "couldn't parse left child expression")
 		}
 
-		return logical.NewFunctionExpression(expr.Operator, []logical.Expression{arg}), nil
+		return logical.NewFunctionExpression(expr.Operator.ToString(), []logical.Expression{arg}), nil
 
 	case *sqlparser.BinaryExpr:
 		left, err := ParseExpression(expr.Left)
@@ -560,7 +588,7 @@ func ParseExpression(expr sqlparser.Expr) (logical.Expression, error) {
 			return nil, errors.Wrap(err, "couldn't parse right child expression")
 		}
 
-		return logical.NewFunctionExpression(expr.Operator, []logical.Expression{left, right}), nil
+		return logical.NewFunctionExpression(expr.Operator.ToString(), []logical.Expression{left, right}), nil
 
 	case *sqlparser.FuncExpr:
 		functionName := strings.ToLower(expr.Name.String())
@@ -610,7 +638,7 @@ func ParseExpression(expr sqlparser.Expr) (logical.Expression, error) {
 		}
 		return logical.NewQueryExpression(subquery), nil
 
-	case *sqlparser.SQLVal:
+	case *sqlparser.Literal:
 		var value octosql.Value
 		var err error
 		switch expr.Type {
@@ -654,7 +682,7 @@ func ParseExpression(expr sqlparser.Expr) (logical.Expression, error) {
 		return logical.NewTuple(expressions), nil
 
 	case *sqlparser.IntervalExpr:
-		c, ok := expr.Expr.(*sqlparser.SQLVal)
+		c, ok := expr.Expr.(*sqlparser.Literal)
 		if !ok {
 			return nil, errors.Errorf("interval expression parameter must be constant, is: %+v", expr.Expr)
 		}
@@ -700,93 +728,95 @@ func ParseExpression(expr sqlparser.Expr) (logical.Expression, error) {
 		return logical.NewFunctionExpression("not", []logical.Expression{childParsed}), nil
 	case *sqlparser.ComparisonExpr:
 		return ParseInfixComparison(expr.Left, expr.Right, expr.Operator)
-	case *sqlparser.ParenExpr:
-		return ParseExpression(expr.Expr)
+	// case *sqlparser.ParenExpr:
+	// 	return ParseExpression(expr.Expr)
 	case *sqlparser.IsExpr:
-		arg, err := ParseExpression(expr.Expr)
+		arg, err := ParseExpression(expr.Left)
 		if err != nil {
 			return nil, errors.Wrap(err, "couldn't parse left child expression")
 		}
 
 		var funcName string
-		switch expr.Operator {
+		switch expr.Right.ToString() {
 		case sqlparser.IsNullStr:
 			funcName = "is null"
 		case sqlparser.IsNotNullStr:
 			funcName = "is not null"
 		default:
-			return nil, errors.Errorf("unsupported IS operator: %s", expr.Operator)
+			return nil, errors.Errorf("unsupported IS operator: %s", expr.Right.ToString())
 		}
 
 		return logical.NewFunctionExpression(funcName, []logical.Expression{arg}), nil
 	case *sqlparser.ConvertExpr:
-		arg, err := ParseExpression(expr.Expr)
-		if err != nil {
-			return nil, errors.Wrap(err, "couldn't parse expression being cast")
-		}
-		targetType, err := ParseType(expr.Type)
-		if err != nil {
-			return nil, errors.Wrap(err, "couldn't parse type to cast to")
-		}
+		// [TODO]
+		panic("TODO")
+		// arg, err := ParseExpression(expr.Expr)
+		// if err != nil {
+		// 	return nil, errors.Wrap(err, "couldn't parse expression being cast")
+		// }
+		// targetType, err := ParseType(expr.Type)
+		// if err != nil {
+		// 	return nil, errors.Wrap(err, "couldn't parse type to cast to")
+		// }
 
-		return logical.NewCast(arg, targetType), nil
+		// return logical.NewCast(arg, targetType), nil
 	default:
 		return nil, errors.Errorf("unsupported expression %+v of type %v", expr, reflect.TypeOf(expr))
 	}
 }
 
-func ParseType(t sqlparser.ConvertType) (octosql.Type, error) {
-	switch t := t.(type) {
-	case *sqlparser.ConvertTypeList:
-		element, err := ParseType(t.Element)
-		if err != nil {
-			return octosql.Type{}, errors.Wrap(err, "couldn't parse element type of list type")
-		}
+// func ParseType(t sqlparser.ConvertType) (octosql.Type, error) {
+// 	switch t := t.(type) {
+// 	case *sqlparser.ConvertTypeList:
+// 		element, err := ParseType(t.Element)
+// 		if err != nil {
+// 			return octosql.Type{}, errors.Wrap(err, "couldn't parse element type of list type")
+// 		}
 
-		return octosql.Type{
-			TypeID: octosql.TypeIDList,
-			List:   struct{ Element *octosql.Type }{Element: &element},
-		}, nil
-	case *sqlparser.ConvertTypeObject:
-		fields := make([]octosql.StructField, len(t.Fields))
-		for i := range t.Fields {
-			fieldType, err := ParseType(t.Fields[i].Type)
-			if err != nil {
-				return octosql.Type{}, errors.Wrapf(err, "couldn't parse field '%s' type of object type", t.Fields[i].Name)
-			}
-			fields[i] = octosql.StructField{
-				Name: t.Fields[i].Name,
-				Type: fieldType,
-			}
-		}
+// 		return octosql.Type{
+// 			TypeID: octosql.TypeIDList,
+// 			List:   struct{ Element *octosql.Type }{Element: &element},
+// 		}, nil
+// 	case *sqlparser.ConvertTypeObject:
+// 		fields := make([]octosql.StructField, len(t.Fields))
+// 		for i := range t.Fields {
+// 			fieldType, err := ParseType(t.Fields[i].Type)
+// 			if err != nil {
+// 				return octosql.Type{}, errors.Wrapf(err, "couldn't parse field '%s' type of object type", t.Fields[i].Name)
+// 			}
+// 			fields[i] = octosql.StructField{
+// 				Name: t.Fields[i].Name,
+// 				Type: fieldType,
+// 			}
+// 		}
 
-		return octosql.Type{
-			TypeID: octosql.TypeIDStruct,
-			Struct: struct{ Fields []octosql.StructField }{Fields: fields},
-		}, nil
-	case *sqlparser.ConvertTypeSimple:
-		switch tName := strings.ToLower(t.Name); tName {
-		case "null":
-			return octosql.Null, nil
-		case "int":
-			return octosql.Int, nil
-		case "float":
-			return octosql.Float, nil
-		case "boolean":
-			return octosql.Boolean, nil
-		case "string":
-			return octosql.String, nil
-		case "time":
-			return octosql.Time, nil
-		case "duration":
-			return octosql.Duration, nil
-		default:
-			return octosql.Type{}, errors.Errorf("unknown type: %s", tName)
-		}
-	default:
-		return octosql.Type{}, errors.Errorf("unsupported type %+v of type %v", t, reflect.TypeOf(t))
-	}
-}
+// 		return octosql.Type{
+// 			TypeID: octosql.TypeIDStruct,
+// 			Struct: struct{ Fields []octosql.StructField }{Fields: fields},
+// 		}, nil
+// 	case *sqlparser.ConvertTypeSimple:
+// 		switch tName := strings.ToLower(t.Name); tName {
+// 		case "null":
+// 			return octosql.Null, nil
+// 		case "int":
+// 			return octosql.Int, nil
+// 		case "float":
+// 			return octosql.Float, nil
+// 		case "boolean":
+// 			return octosql.Boolean, nil
+// 		case "string":
+// 			return octosql.String, nil
+// 		case "time":
+// 			return octosql.Time, nil
+// 		case "duration":
+// 			return octosql.Duration, nil
+// 		default:
+// 			return octosql.Type{}, errors.Errorf("unknown type: %s", tName)
+// 		}
+// 	default:
+// 		return octosql.Type{}, errors.Errorf("unsupported type %+v of type %v", t, reflect.TypeOf(t))
+// 	}
+// }
 
 func isAggregateExpression(expr sqlparser.Expr) bool {
 	switch expr := expr.(type) {
@@ -797,8 +827,9 @@ func isAggregateExpression(expr sqlparser.Expr) bool {
 			return true
 		}
 
-	case *sqlparser.ParenExpr:
-		return isAggregateExpression(expr.Expr)
+		// [TODO]
+		// case *sqlparser.ParenExpr:
+		// 	return isAggregateExpression(expr.Expr)
 	}
 	return false
 }
@@ -829,46 +860,47 @@ func ParseInfixOperator(left, right sqlparser.Expr, operator string) (logical.Ex
 // 	return logical.NewFunctionExpression(operator, []logical.Expression{childParsed}), nil
 // }
 
-func ParseInfixComparison(left, right sqlparser.Expr, operator string) (logical.Expression, error) {
+func ParseInfixComparison(left, right sqlparser.Expr, operator sqlparser.ComparisonExprOperator) (logical.Expression, error) {
 	leftParsed, err := ParseExpression(left)
 	if err != nil {
-		return nil, errors.Wrapf(err, "couldn't parse left hand side of %s comparator %+v", operator, left)
+		return nil, errors.Wrapf(err, "couldn't parse left hand side of %s comparator %+v", operator.ToString(), left)
 	}
 	rightParsed, err := ParseExpression(right)
 	if err != nil {
-		return nil, errors.Wrapf(err, "couldn't parse right hand side of %s comparator %+v", operator, right)
+		return nil, errors.Wrapf(err, "couldn't parse right hand side of %s comparator %+v", operator.ToString(), right)
 	}
-	if operator == sqlparser.NotLikeStr {
+	if operator == sqlparser.NotLikeOp {
 		return logical.NewFunctionExpression(
 			"not",
 			[]logical.Expression{
 				logical.NewFunctionExpression("like", []logical.Expression{leftParsed, rightParsed}),
 			},
 		), nil
-	} else if operator == sqlparser.NotLikeRegexpStr {
-		return logical.NewFunctionExpression(
-			"not",
-			[]logical.Expression{
-				logical.NewFunctionExpression("~", []logical.Expression{leftParsed, rightParsed}),
-			},
-		), nil
-	} else if operator == sqlparser.NotLikeRegexpCaseInsensitiveStr {
-		return logical.NewFunctionExpression(
-			"not",
-			[]logical.Expression{
-				logical.NewFunctionExpression("~*", []logical.Expression{leftParsed, rightParsed}),
-			},
-		), nil
+		// [TODO]
+		// } else if operator == sqlparser.NotLikeRegexpStr {
+		// 	return logical.NewFunctionExpression(
+		// 		"not",
+		// 		[]logical.Expression{
+		// 			logical.NewFunctionExpression("~", []logical.Expression{leftParsed, rightParsed}),
+		// 		},
+		// 	), nil
+		// } else if operator == sqlparser.NotLikeRegexpCaseInsensitiveStr {
+		// 	return logical.NewFunctionExpression(
+		// 		"not",
+		// 		[]logical.Expression{
+		// 			logical.NewFunctionExpression("~*", []logical.Expression{leftParsed, rightParsed}),
+		// 		},
+		// 	), nil
 	}
 
-	if operator == sqlparser.InStr {
+	if operator == sqlparser.InOp {
 		switch rightParsed.(type) {
 		case *logical.Constant:
-			operator = sqlparser.EqualStr
+			operator = sqlparser.EqualOp
 		}
 	}
 
-	return logical.NewFunctionExpression(operator, []logical.Expression{leftParsed, rightParsed}), nil
+	return logical.NewFunctionExpression(operator.ToString(), []logical.Expression{leftParsed, rightParsed}), nil
 }
 
 func parseOrderByExpressions(orderBy sqlparser.OrderBy) ([]logical.Expression, []logical.OrderDirection, error) {
@@ -882,7 +914,7 @@ func parseOrderByExpressions(orderBy sqlparser.OrderBy) ([]logical.Expression, [
 		}
 
 		expressions[i] = expr
-		directions[i] = logical.OrderDirection(field.Direction)
+		directions[i] = logical.OrderDirection(field.Direction.ToString())
 	}
 
 	return expressions, directions, nil

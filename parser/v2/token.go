@@ -216,6 +216,10 @@ func (tkn *Tokenizer) Scan() (int, string) {
 			buf = strconv.AppendInt(buf, int64(tkn.posVarIndex), 10)
 			return VALUE_ARG, string(buf)
 		case '.':
+			if tkn.cur() == '/' {
+				tkn.skip(1)
+				return tkn.scanIdentifier(true)
+			}
 			return int(ch), ""
 		case '/':
 			switch tkn.cur() {
@@ -699,7 +703,7 @@ func isLetter(ch uint16) bool {
 }
 
 func isCarat(ch uint16) bool {
-	return ch == '.' || ch == '\'' || ch == '"' || ch == '`'
+	return ch == '.' || ch == '\'' || ch == '"' || ch == '`' || ch == '/' || ch == '@'
 }
 
 func digitVal(ch uint16) int {

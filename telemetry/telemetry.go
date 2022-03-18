@@ -1,13 +1,11 @@
 package telemetry
 
 import (
-	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"log"
-	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -103,22 +101,23 @@ func sendBatch(ctx context.Context) error {
 		return nil
 	}
 
-	var payload []json.RawMessage
-	for i := range files {
-		data, err := os.ReadFile(files[i])
-		if err != nil {
-			return err
-		}
-		payload = append(payload, data)
-	}
-	data, err := json.Marshal(payload)
-	if err != nil {
-		return err
-	}
+	// var payload []json.RawMessage
+	// for i := range files {
+	// 	data, err := os.ReadFile(files[i])
+	// 	if err != nil {
+	// 		return err
+	// 	}
+	// 	payload = append(payload, data)
+	// }
 
-	if _, err := http.Post("https://telemetry.octosql.dev/telemetry", "encoding/json", bytes.NewReader(data)); err != nil {
-		return err
-	}
+	// data, err := json.Marshal(payload)
+	// if err != nil {
+	// 	return err
+	// }
+
+	// if _, err := http.Post("https://telemetry.octosql.dev/telemetry", "encoding/json", bytes.NewReader(data)); err != nil {
+	// 	return err
+	// }
 
 	if err := os.RemoveAll(filepath.Join(telemetryDir, "recent")); err != nil {
 		return err

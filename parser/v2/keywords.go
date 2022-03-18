@@ -210,6 +210,7 @@ var keywords = []keyword{
 	{"dense_rank", UNUSED},
 	{"desc", DESC},
 	{"describe", DESCRIBE},
+	{"descriptor", DESCRIPTOR},
 	{"deterministic", UNUSED},
 	{"directory", DIRECTORY},
 	{"disable", DISABLE},

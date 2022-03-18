@@ -639,48 +639,48 @@ query_expression_parens:
 query_expression:
  query_expression_body order_by_opt limit_opt
   {
-	$1.SetOrderBy($2)
-	$1.SetLimit($3)
-	$$ = $1
+  $1.SetOrderBy($2)
+  $1.SetLimit($3)
+  $$ = $1
   }
 | query_expression_parens limit_clause
   {
-	$1.SetLimit($2)
-	$$ = $1
+  $1.SetLimit($2)
+  $$ = $1
   }
 | query_expression_parens order_by_clause limit_opt
   {
-	$1.SetOrderBy($2)
-	$1.SetLimit($3)
-	$$ = $1
+  $1.SetOrderBy($2)
+  $1.SetLimit($3)
+  $$ = $1
   }
 | with_clause query_expression_body order_by_opt limit_opt
   {
-  		$2.SetWith($1)
-		$2.SetOrderBy($3)
-		$2.SetLimit($4)
-		$$ = $2
+  $2.SetWith($1)
+  $2.SetOrderBy($3)
+  $2.SetLimit($4)
+  $$ = $2
   }
 | with_clause query_expression_parens limit_clause
   {
-  		$2.SetWith($1)
-		$2.SetLimit($3)
-		$$ = $2
+  $2.SetWith($1)
+  $2.SetLimit($3)
+  $$ = $2
   }
 | with_clause query_expression_parens order_by_clause limit_opt
   {
-  		$2.SetWith($1)
-		$2.SetOrderBy($3)
-		$2.SetLimit($4)
-		$$ = $2
+  $2.SetWith($1)
+  $2.SetOrderBy($3)
+  $2.SetLimit($4)
+  $$ = $2
   }
 | with_clause query_expression_parens
   {
-	$2.SetWith($1)
+  $2.SetWith($1)
   }
 | SELECT comment_opt cache_opt NEXT num_val for_from table_name
   {
-	$$ = NewSelect(Comments($2), SelectExprs{&Nextval{Expr: $5}}, []string{$3}/*options*/, nil, TableExprs{&AliasedTableExpr{Expr: $7}}, nil/*where*/, nil/*groupBy*/, nil/*having*/, nil/*triggers*/)
+  $$ = NewSelect(Comments($2), SelectExprs{&Nextval{Expr: $5}}, []string{$3}/*options*/, nil, TableExprs{&AliasedTableExpr{Expr: $7}}, nil/*where*/, nil/*groupBy*/, nil/*having*/, nil/*triggers*/)
   }
 
 query_expression_body:

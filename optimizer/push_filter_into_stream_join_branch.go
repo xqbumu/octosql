@@ -15,6 +15,8 @@ func PushDownFilterPredicatesIntoStreamJoinBranch(node Node) (Node, bool) {
 			if node.Filter.Source.NodeType != NodeTypeStreamJoin {
 				return node
 			}
+
+			// Directly PushDown
 			leftSchema := node.Filter.Source.StreamJoin.Left.Schema
 			rightSchema := node.Filter.Source.StreamJoin.Right.Schema
 
@@ -39,6 +41,7 @@ func PushDownFilterPredicatesIntoStreamJoinBranch(node Node) (Node, bool) {
 				}
 			}
 
+			// Cross PushDown
 			leftJoinKeys := node.Filter.Source.StreamJoin.LeftKey
 			rightJoinKeys := node.Filter.Source.StreamJoin.RightKey
 			genAppender := func(variable *Variable) (func(expr Expression), *Variable) {

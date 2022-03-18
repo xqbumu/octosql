@@ -246,7 +246,7 @@ func (expr Expression) SplitByAnd() []Expression {
 }
 
 func (expr Expression) VariablesUsed() []string {
-	acc := make(map[string]struct{})
+	acc := make(map[string]any)
 	expr.variablesUsed(acc)
 
 	var out []string
@@ -256,10 +256,10 @@ func (expr Expression) VariablesUsed() []string {
 	return out
 }
 
-func (expr Expression) variablesUsed(acc map[string]struct{}) {
+func (expr Expression) variablesUsed(acc map[string]any) {
 	switch expr.ExpressionType {
 	case ExpressionTypeVariable:
-		acc[expr.Variable.Name] = struct{}{}
+		acc[expr.Variable.Name] = nil
 		return
 	case ExpressionTypeConstant:
 		return

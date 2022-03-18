@@ -27,12 +27,17 @@ func (node *With) Typecheck(ctx context.Context, env physical.Environment, logic
 	}
 
 	for i := range node.cteNodes {
-		cte, mapping := node.cteNodes[i].Typecheck(ctx, env, Environment{
-			CommonTableExprs:     newCTEs,
-			TableValuedFunctions: logicalEnv.TableValuedFunctions,
-			UniqueVariableNames:  logicalEnv.UniqueVariableNames,
-			UniqueNameGenerator:  logicalEnv.UniqueNameGenerator,
-		})
+
+		cte, mapping := node.cteNodes[i].Typecheck(
+			context.WithValue(ctx, ctxKeyFromWith, node.cteNames[i]),
+			env,
+			Environment{
+				CommonTableExprs:     newCTEs,
+				TableValuedFunctions: logicalEnv.TableValuedFunctions,
+				UniqueVariableNames:  logicalEnv.UniqueVariableNames,
+				UniqueNameGenerator:  logicalEnv.UniqueNameGenerator,
+			},
+		)
 		newCTEs[node.cteNames[i]] = CommonTableExpr{
 			Node:                  cte,
 			UniqueVariableMapping: mapping,

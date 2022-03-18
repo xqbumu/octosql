@@ -749,7 +749,7 @@ outer:
 	//
 	if t == MARK {
 		if !lflag {
-			fmt.Fprintf(ftable, "\n//line %v:%v\n", infile, lineno)
+			fmt.Fprintf(ftable, "\n// line at %v:%v\n", infile, lineno)
 		}
 		for {
 			c := getrune(finput)
@@ -1082,7 +1082,7 @@ var gotypes = make(map[string]*gotypeinfo)
 
 func typeinfo() {
 	if !lflag {
-		fmt.Fprintf(ftable, "\n//line %v:%v\n", infile, lineno)
+		fmt.Fprintf(ftable, "\n// line at %v:%v\n", infile, lineno)
 	}
 	fmt.Fprintf(ftable, "type %sSymType struct {", prefix)
 	for _, tt := range gotypes {
@@ -1183,7 +1183,7 @@ func cpycode() {
 		lineno++
 	}
 	if !lflag {
-		fmt.Fprintf(ftable, "\n//line %v:%v\n", infile, lineno)
+		fmt.Fprintf(ftable, "\n// line at %v:%v\n", infile, lineno)
 	}
 	// accumulate until %}
 	code := make([]rune, 0, 1024)
@@ -1220,7 +1220,7 @@ func emitcode(code []rune, lineno int) {
 			fmt.Fprintln(ftable, `__yyunsafe__ "unsafe"`)
 			fmt.Fprintln(ftable, `)`)
 			if !lflag {
-				fmt.Fprintf(ftable, "//line %v:%v\n\t\t", infile, lineno+i)
+				fmt.Fprintf(ftable, "// line at %v:%v\n\t\t", infile, lineno+i)
 			}
 			writtenImports = true
 		}
@@ -1434,7 +1434,7 @@ loop:
 //
 func cpyact(fcode *bytes.Buffer, curprod []int, max int, unionType *string) {
 	if !lflag {
-		fmt.Fprintf(fcode, "\n//line %v:%v", infile, lineno)
+		fmt.Fprintf(fcode, "\n// line at %v:%v", infile, lineno)
 	}
 	fmt.Fprint(fcode, "\n\t\t")
 
@@ -2316,7 +2316,7 @@ func output() {
 	var c, u, v int
 
 	if !lflag {
-		fmt.Fprintf(ftable, "\n//line yacctab:1")
+		fmt.Fprintf(ftable, "\n// line at yacctab:1")
 	}
 	fmt.Fprintf(ftable, "\nvar %sExca = [...]int{\n", prefix)
 
@@ -3112,7 +3112,7 @@ func others() {
 
 	// copy yaccpar
 	if !lflag {
-		fmt.Fprintf(ftable, "\n//line yaccpar:1\n")
+		fmt.Fprintf(ftable, "\n// line at yaccpar:1\n")
 	}
 
 	parts := strings.SplitN(yaccpar, prefix+"run()", 2)
