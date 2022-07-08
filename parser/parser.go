@@ -11,7 +11,7 @@ import (
 
 	"github.com/cube2222/octosql/logical"
 	"github.com/cube2222/octosql/octosql"
-	"github.com/cube2222/octosql/parser/sqlparser"
+	"github.com/xqbumu/sqlparser"
 )
 
 // func ParseUnion(statement *sqlparser.Union) (logical.Node, error) {

@@ -2,6 +2,7 @@ package nodes
 
 import (
 	"fmt"
+	"log"
 	"time"
 
 	. "github.com/cube2222/octosql/execution"
@@ -37,6 +38,10 @@ func (m *MaxDifferenceWatermark) Run(ctx ExecutionContext, produce ProduceFn, me
 			maxValue = curTimeValue
 
 			// TODO: Think about adding granularity here. (so i.e. only have second resolution)
+			log.Printf(
+				"MaxDifferenceWatermark Run - %s\n",
+				curTimeValue.Add(-m.maxDifference).Format(time.RFC3339),
+			)
 			if err := metaSend(ctx, MetadataMessage{
 				Type:      MetadataMessageTypeWatermark,
 				Watermark: curTimeValue.Add(-m.maxDifference),

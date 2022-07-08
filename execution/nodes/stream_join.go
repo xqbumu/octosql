@@ -307,7 +307,9 @@ func (s *StreamJoin) receiveRecord(ctx ExecutionContext, produce ProduceFn, myRe
 					copy(outputValues[len(subitemTyped.GroupKey):], record.Values)
 				}
 
-				if err := produce(ProduceFromExecutionContext(ctx), NewRecord(outputValues, record.Retraction)); err != nil {
+				outputRecord := NewRecord(outputValues, record.Retraction)
+				// log.Printf("--> count %d, i: %d, receiveRecord: %s", subitemTyped.count, i, outputValues)
+				if err := produce(ProduceFromExecutionContext(ctx), outputRecord); err != nil {
 					outErr = fmt.Errorf("couldn't produce: %w", err)
 					return false
 				}

@@ -13,9 +13,9 @@ import (
 	"github.com/cube2222/octosql/functions"
 	"github.com/cube2222/octosql/logical"
 	"github.com/cube2222/octosql/parser"
-	"github.com/cube2222/octosql/parser/sqlparser"
 	"github.com/cube2222/octosql/physical"
 	"github.com/cube2222/octosql/table_valued_functions"
+	"github.com/xqbumu/sqlparser"
 )
 
 func main() {
